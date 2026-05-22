@@ -20,21 +20,28 @@ def concat_local_audio(file_paths, output_dir, mode="sequential"):
         file_paths = file_paths[:]
         random.shuffle(file_paths)
 
-    list_path = os.path.join(output_dir, "audio_concat.txt")
-    with open(list_path, "w") as f:
-        for fp in file_paths:
-            safe_path = fp.replace("'", "'\\''")
-            f.write(f"file '{safe_path}'\n")
-
     output_path = os.path.join(output_dir, "combined_audio.mp3")
-    cmd = [
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-        "-i", list_path,
-        "-c", "copy",
+
+    # Use filter_complex concat for reliable merging of different audio formats
+    cmd = ["ffmpeg", "-y"]
+    for fp in file_paths:
+        cmd.extend(["-i", fp])
+
+    filter_str = ""
+    for i in range(len(file_paths)):
+        filter_str += "[{}:a]".format(i)
+    filter_str += "concat=n={}:v=0:a=1[outa]".format(len(file_paths))
+
+    cmd.extend([
+        "-filter_complex", filter_str,
+        "-map", "[outa]",
+        "-c:a", "libmp3lame", "-b:a", "192k",
         output_path
-    ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
-    os.remove(list_path)
+    ])
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError("Audio concat failed: " + result.stderr[-500:])
     return output_path
 
 

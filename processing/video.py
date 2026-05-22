@@ -17,6 +17,13 @@ def get_video_duration(path):
     return float(data["format"]["duration"])
 
 
+def _run_ffmpeg(cmd):
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError("ffmpeg failed: " + result.stderr[-500:])
+    return result
+
+
 def encode_base_loop(source_video, output_dir, bitrate_mbps=4):
     output = os.path.join(output_dir, "base_loop.mp4")
     bitrate = f"{bitrate_mbps}M"
@@ -31,7 +38,7 @@ def encode_base_loop(source_video, output_dir, bitrate_mbps=4):
         "-profile:v", "high", "-r", "24",
         "-an", output
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    _run_ffmpeg(cmd)
     return output
 
 
@@ -51,7 +58,7 @@ def encode_intro_with_overlay(source_video, output_dir, layers, bitrate_mbps=4):
         "-profile:v", "high", "-r", "24",
         "-an", output
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    _run_ffmpeg(cmd)
     return output
 
 
@@ -77,13 +84,12 @@ def build_final_video(intro_path, base_loop_path, audio_path, output_path, temp_
         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
         "-shortest", output_path
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    _run_ffmpeg(cmd)
     os.remove(concat_list)
     return output_path
 
 
 def build_final_with_custom_intro(custom_intro_path, base_loop_path, audio_path, output_path, temp_dir):
-    """Use a pre-made intro video file instead of generating one."""
     from .audio import get_audio_duration
 
     audio_dur = get_audio_duration(audio_path)
@@ -105,6 +111,6 @@ def build_final_with_custom_intro(custom_intro_path, base_loop_path, audio_path,
         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
         "-shortest", output_path
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    _run_ffmpeg(cmd)
     os.remove(concat_list)
     return output_path
