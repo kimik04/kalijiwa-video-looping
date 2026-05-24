@@ -316,6 +316,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 payload.overlay_layers = item.overlayLayers;
             }
 
+            payload.fade = item.fade;
+
             logLine("[process] Sending to backend...", "dim");
             const res = await fetch("/api/process", {
                 method: "POST",
