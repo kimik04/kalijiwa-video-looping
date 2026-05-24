@@ -61,13 +61,15 @@ def encode_intro_with_fade_in(source_video, output_dir, fade_in_dur, bitrate_mbp
     return output
 
 
-def encode_outro_with_fade_out(base_loop_path, output_dir, fade_out_dur, bitrate_mbps=4):
-    """Encode outro segment from base loop with fade out applied."""
+def encode_outro_with_fade_out(base_loop_path, output_dir, fade_out_dur, bitrate_mbps=4, target_dur=None):
     output = os.path.join(output_dir, "outro_part.mp4")
     loop_dur = get_video_duration(base_loop_path)
-    fade_start = max(0, loop_dur - fade_out_dur)
+    if target_dur is None or target_dur <= 0 or target_dur > loop_dur:
+        target_dur = loop_dur
+    fade_start = max(0, target_dur - fade_out_dur)
     vf = f"fade=t=out:st={fade_start}:d={fade_out_dur}"
-    cmd = ["ffmpeg", "-y", "-i", base_loop_path, "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    cmd = ["ffmpeg", "-y", "-i", base_loop_path, "-t", f"{target_dur}",
+           "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
@@ -83,20 +85,22 @@ def _build_audio_filter(audio_dur, fade_in_dur, fade_out_dur):
 
 
 def build_final_video(intro_path, base_loop_path, audio_path, output_path, temp_dir,
-                      outro_path=None, audio_fade_in=0, audio_fade_out=0):
+                      outro_path=None, loops_override=None,
+                      audio_fade_in=0, audio_fade_out=0):
     from .audio import get_audio_duration
 
     audio_dur = get_audio_duration(audio_path)
-    intro_dur = get_video_duration(intro_path)
-    loop_dur = get_video_duration(base_loop_path)
 
-    if outro_path:
-        outro_dur = get_video_duration(outro_path)
-        remaining = audio_dur - intro_dur - outro_dur
-        loops_needed = max(0, math.ceil(remaining / loop_dur))
+    if loops_override is not None:
+        loops_needed = loops_override
     else:
-        remaining = audio_dur - intro_dur
-        loops_needed = math.ceil(remaining / loop_dur)
+        intro_dur = get_video_duration(intro_path)
+        loop_dur = get_video_duration(base_loop_path)
+        if outro_path:
+            outro_dur = get_video_duration(outro_path)
+            loops_needed = max(0, math.ceil((audio_dur - intro_dur - outro_dur) / loop_dur))
+        else:
+            loops_needed = math.ceil((audio_dur - intro_dur) / loop_dur)
 
     concat_list = os.path.join(temp_dir, "concat_list.txt")
     with open(concat_list, "w") as f:

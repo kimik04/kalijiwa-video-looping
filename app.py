@@ -218,22 +218,30 @@ def _run_job(job_id, data):
             )
             _log(job_id, "Intro encoded")
 
-        # Step 3b: Optional outro with fade out
-        outro_path = None
-        if v_fade_out > 0:
-            _log(job_id, f"Encoding outro with fade out {v_fade_out}s...")
-            outro_path = encode_outro_with_fade_out(base_loop, temp_dir, v_fade_out, bitrate_mbps=bitrate)
-            _log(job_id, "Outro encoded")
+        intro_dur = get_video_duration(intro_path)
 
-        # Step 4: Build final
+        outro_path = None
+        outro_dur = 0
+        import math
+        if v_fade_out > 0:
+            remaining = audio_dur - intro_dur
+            loops = max(0, math.floor((remaining - v_fade_out) / loop_dur))
+            outro_dur = remaining - loops * loop_dur
+            if outro_dur < v_fade_out:
+                outro_dur = v_fade_out
+            _log(job_id, f"Encoding outro {outro_dur:.2f}s with fade out {v_fade_out}s...")
+            outro_path = encode_outro_with_fade_out(
+                base_loop, temp_dir, v_fade_out, bitrate_mbps=bitrate, target_dur=outro_dur
+            )
+            outro_dur = get_video_duration(outro_path)
+            _log(job_id, "Outro encoded")
+        else:
+            loops = max(0, math.ceil((audio_dur - intro_dur) / loop_dur))
+
         jobs[job_id]["progress"] = "Building final video..."
         output_name = data.get("output_name", "output") + ".mp4"
         output_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{job_id}_{output_name}")
 
-        intro_dur = get_video_duration(intro_path)
-        outro_dur = get_video_duration(outro_path) if outro_path else 0
-        import math
-        loops = max(0, math.ceil((audio_dur - intro_dur - outro_dur) / loop_dur))
         est_size = (loop_size * (loops + 2) + audio_dur * 192 / 8 / 1024) / 1024
         _log(job_id, f"Concat: intro + {loops} loops" + (" + outro" if outro_path else "") + f" | Est. size: {est_size:.2f} GB")
         _log(job_id, "Stream copying (no re-encode)...")
@@ -241,6 +249,7 @@ def _run_job(job_id, data):
         build_final_video(
             intro_path, base_loop, audio_path, output_path, temp_dir,
             outro_path=outro_path,
+            loops_override=loops,
             audio_fade_in=a_fade_in,
             audio_fade_out=a_fade_out,
         )
