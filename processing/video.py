@@ -24,93 +24,111 @@ def _run_ffmpeg(cmd):
     return result
 
 
+def _bitrate_args(bitrate_mbps):
+    return [
+        "-c:v", "libx264", "-preset", "fast",
+        "-b:v", f"{bitrate_mbps}M",
+        "-maxrate", f"{bitrate_mbps * 1.125:.1f}M",
+        "-bufsize", f"{bitrate_mbps * 2}M",
+        "-profile:v", "high", "-r", "24",
+    ]
+
+
 def encode_base_loop(source_video, output_dir, bitrate_mbps=4):
     output = os.path.join(output_dir, "base_loop.mp4")
-    bitrate = f"{bitrate_mbps}M"
-    maxrate = f"{bitrate_mbps * 1.125:.1f}M"
-    bufsize = f"{bitrate_mbps * 2}M"
-
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", source_video,
-        "-c:v", "libx264", "-preset", "fast",
-        "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
-        "-profile:v", "high", "-r", "24",
-        "-an", output
-    ]
+    cmd = ["ffmpeg", "-y", "-i", source_video] + _bitrate_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
 
-def encode_intro_with_overlay(source_video, output_dir, layers, bitrate_mbps=4):
+def encode_intro_with_overlay(source_video, output_dir, layers, bitrate_mbps=4, fade_in_dur=0):
     output = os.path.join(output_dir, "intro_part.mp4")
     vf = build_drawtext_filter(layers)
-    bitrate = f"{bitrate_mbps}M"
-    maxrate = f"{bitrate_mbps * 1.125:.1f}M"
-    bufsize = f"{bitrate_mbps * 2}M"
+    if fade_in_dur > 0:
+        vf = f"{vf},fade=t=in:st=0:d={fade_in_dur}"
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", source_video,
-        "-vf", vf,
-        "-c:v", "libx264", "-preset", "fast",
-        "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
-        "-profile:v", "high", "-r", "24",
-        "-an", output
-    ]
+    cmd = ["ffmpeg", "-y", "-i", source_video, "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
 
-def build_final_video(intro_path, base_loop_path, audio_path, output_path, temp_dir):
+def encode_intro_with_fade_in(source_video, output_dir, fade_in_dur, bitrate_mbps=4):
+    """Re-encode a custom intro video with fade in applied."""
+    output = os.path.join(output_dir, "intro_faded.mp4")
+    vf = f"fade=t=in:st=0:d={fade_in_dur}"
+    cmd = ["ffmpeg", "-y", "-i", source_video, "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    _run_ffmpeg(cmd)
+    return output
+
+
+def encode_outro_with_fade_out(base_loop_path, output_dir, fade_out_dur, bitrate_mbps=4):
+    """Encode outro segment from base loop with fade out applied."""
+    output = os.path.join(output_dir, "outro_part.mp4")
+    loop_dur = get_video_duration(base_loop_path)
+    fade_start = max(0, loop_dur - fade_out_dur)
+    vf = f"fade=t=out:st={fade_start}:d={fade_out_dur}"
+    cmd = ["ffmpeg", "-y", "-i", base_loop_path, "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    _run_ffmpeg(cmd)
+    return output
+
+
+def _build_audio_filter(audio_dur, fade_in_dur, fade_out_dur):
+    parts = []
+    if fade_in_dur and fade_in_dur > 0:
+        parts.append(f"afade=t=in:st=0:d={fade_in_dur}")
+    if fade_out_dur and fade_out_dur > 0:
+        fade_start = max(0, audio_dur - fade_out_dur)
+        parts.append(f"afade=t=out:st={fade_start}:d={fade_out_dur}")
+    return ",".join(parts) if parts else None
+
+
+def build_final_video(intro_path, base_loop_path, audio_path, output_path, temp_dir,
+                      outro_path=None, audio_fade_in=0, audio_fade_out=0):
     from .audio import get_audio_duration
 
     audio_dur = get_audio_duration(audio_path)
     intro_dur = get_video_duration(intro_path)
-    remaining = audio_dur - intro_dur
     loop_dur = get_video_duration(base_loop_path)
-    loops_needed = math.ceil(remaining / loop_dur)
+
+    if outro_path:
+        outro_dur = get_video_duration(outro_path)
+        remaining = audio_dur - intro_dur - outro_dur
+        loops_needed = max(0, math.ceil(remaining / loop_dur))
+    else:
+        remaining = audio_dur - intro_dur
+        loops_needed = math.ceil(remaining / loop_dur)
 
     concat_list = os.path.join(temp_dir, "concat_list.txt")
     with open(concat_list, "w") as f:
         f.write(f"file '{intro_path}'\n")
         for _ in range(loops_needed):
             f.write(f"file '{base_loop_path}'\n")
+        if outro_path:
+            f.write(f"file '{outro_path}'\n")
 
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", concat_list,
         "-i", audio_path,
-        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-        "-shortest", output_path
+        "-c:v", "copy",
     ]
+
+    audio_filter = _build_audio_filter(audio_dur, audio_fade_in, audio_fade_out)
+    if audio_filter:
+        cmd.extend(["-af", audio_filter])
+
+    cmd.extend(["-c:a", "aac", "-b:a", "192k", "-shortest", output_path])
+
     _run_ffmpeg(cmd)
     os.remove(concat_list)
     return output_path
 
 
-def build_final_with_custom_intro(custom_intro_path, base_loop_path, audio_path, output_path, temp_dir):
-    from .audio import get_audio_duration
-
-    audio_dur = get_audio_duration(audio_path)
-    intro_dur = get_video_duration(custom_intro_path)
-    remaining = audio_dur - intro_dur
-    loop_dur = get_video_duration(base_loop_path)
-    loops_needed = math.ceil(remaining / loop_dur)
-
-    concat_list = os.path.join(temp_dir, "concat_list.txt")
-    with open(concat_list, "w") as f:
-        f.write(f"file '{custom_intro_path}'\n")
-        for _ in range(loops_needed):
-            f.write(f"file '{base_loop_path}'\n")
-
-    cmd = [
-        "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0", "-i", concat_list,
-        "-i", audio_path,
-        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-        "-shortest", output_path
-    ]
-    _run_ffmpeg(cmd)
-    os.remove(concat_list)
-    return output_path
+def build_final_with_custom_intro(custom_intro_path, base_loop_path, audio_path, output_path, temp_dir,
+                                  outro_path=None, audio_fade_in=0, audio_fade_out=0):
+    return build_final_video(
+        custom_intro_path, base_loop_path, audio_path, output_path, temp_dir,
+        outro_path=outro_path,
+        audio_fade_in=audio_fade_in,
+        audio_fade_out=audio_fade_out,
+    )

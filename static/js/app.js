@@ -256,6 +256,16 @@ document.addEventListener("DOMContentLoaded", () => {
             bitrate: parseFloat(document.getElementById("bitrate").value),
             outputName: name,
             overlayLayers: JSON.parse(JSON.stringify(overlayLayers)),
+            fade: {
+                videoFadeIn: document.getElementById("videoFadeInEnabled").checked,
+                videoFadeInDur: parseFloat(document.getElementById("videoFadeInDuration").value),
+                videoFadeOut: document.getElementById("videoFadeOutEnabled").checked,
+                videoFadeOutDur: parseFloat(document.getElementById("videoFadeOutDuration").value),
+                audioFadeIn: document.getElementById("audioFadeInEnabled").checked,
+                audioFadeInDur: parseFloat(document.getElementById("audioFadeInDuration").value),
+                audioFadeOut: document.getElementById("audioFadeOutEnabled").checked,
+                audioFadeOutDur: parseFloat(document.getElementById("audioFadeOutDuration").value),
+            },
         };
     }
 

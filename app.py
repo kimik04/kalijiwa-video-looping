@@ -9,7 +9,8 @@ from werkzeug.utils import secure_filename
 from processing.audio import download_youtube_audio, concat_local_audio, get_audio_duration
 from processing.video import (
     encode_base_loop, encode_intro_with_overlay,
-    build_final_video, build_final_with_custom_intro, get_video_duration
+    encode_intro_with_fade_in, encode_outro_with_fade_out,
+    build_final_video, get_video_duration
 )
 from processing.overlay import default_layers
 
@@ -152,9 +153,17 @@ def _run_job(job_id, data):
         audio_mode = data["audio_mode"]
         intro_mode = data["intro_mode"]
         bitrate = data.get("bitrate", 4)
+        fade = data.get("fade", {}) or {}
+
+        v_fade_in = float(fade.get("videoFadeInDur", 0)) if fade.get("videoFadeIn") else 0
+        v_fade_out = float(fade.get("videoFadeOutDur", 0)) if fade.get("videoFadeOut") else 0
+        a_fade_in = float(fade.get("audioFadeInDur", 0)) if fade.get("audioFadeIn") else 0
+        a_fade_out = float(fade.get("audioFadeOutDur", 0)) if fade.get("audioFadeOut") else 0
 
         _log(job_id, f"Video: {os.path.basename(video_source)}")
         _log(job_id, f"Audio mode: {audio_mode} | Intro: {intro_mode} | Bitrate: {bitrate}M")
+        if v_fade_in or v_fade_out or a_fade_in or a_fade_out:
+            _log(job_id, f"Fade — video in:{v_fade_in}s out:{v_fade_out}s | audio in:{a_fade_in}s out:{a_fade_out}s")
 
         # Step 1: Prepare audio
         jobs[job_id]["progress"] = "Preparing audio..."
@@ -180,35 +189,61 @@ def _run_job(job_id, data):
         _log(job_id, f"Encoding base loop @ {bitrate} Mbps...")
         base_loop = encode_base_loop(video_source, temp_dir, bitrate_mbps=bitrate)
         loop_size = os.path.getsize(base_loop) / (1024*1024)
-        _log(job_id, f"Base loop: {loop_size:.1f} MB")
+        loop_dur = get_video_duration(base_loop)
+        _log(job_id, f"Base loop: {loop_size:.1f} MB ({loop_dur:.1f}s)")
 
-        # Step 3: Prepare intro
+        # Cap fade durations to segment length
+        if v_fade_in and v_fade_in > loop_dur:
+            _log(job_id, f"WARN: video fade in capped {v_fade_in}s -> {loop_dur}s")
+            v_fade_in = loop_dur
+        if v_fade_out and v_fade_out > loop_dur:
+            _log(job_id, f"WARN: video fade out capped {v_fade_out}s -> {loop_dur}s")
+            v_fade_out = loop_dur
+
+        # Step 3: Prepare intro (with optional fade in)
         jobs[job_id]["progress"] = "Preparing intro..."
         if intro_mode == "custom":
-            intro_path = data["custom_intro"]
-            _log(job_id, f"Using custom intro: {os.path.basename(intro_path)}")
+            intro_src = data["custom_intro"]
+            if v_fade_in > 0:
+                _log(job_id, f"Re-encoding custom intro with fade in {v_fade_in}s...")
+                intro_path = encode_intro_with_fade_in(intro_src, temp_dir, v_fade_in, bitrate_mbps=bitrate)
+            else:
+                intro_path = intro_src
+                _log(job_id, f"Using custom intro: {os.path.basename(intro_path)}")
         else:
             layers = data.get("overlay_layers", default_layers())
             _log(job_id, f"Generating intro with {len(layers)} overlay layers...")
-            intro_path = encode_intro_with_overlay(video_source, temp_dir, layers, bitrate_mbps=bitrate)
+            intro_path = encode_intro_with_overlay(
+                video_source, temp_dir, layers, bitrate_mbps=bitrate, fade_in_dur=v_fade_in
+            )
             _log(job_id, "Intro encoded")
+
+        # Step 3b: Optional outro with fade out
+        outro_path = None
+        if v_fade_out > 0:
+            _log(job_id, f"Encoding outro with fade out {v_fade_out}s...")
+            outro_path = encode_outro_with_fade_out(base_loop, temp_dir, v_fade_out, bitrate_mbps=bitrate)
+            _log(job_id, "Outro encoded")
 
         # Step 4: Build final
         jobs[job_id]["progress"] = "Building final video..."
         output_name = data.get("output_name", "output") + ".mp4"
         output_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{job_id}_{output_name}")
 
-        video_dur = get_video_duration(base_loop)
+        intro_dur = get_video_duration(intro_path)
+        outro_dur = get_video_duration(outro_path) if outro_path else 0
         import math
-        loops = math.ceil((audio_dur - get_video_duration(intro_path)) / video_dur)
-        est_size = (loop_size * (loops + 1) + audio_dur * 192 / 8 / 1024) / 1024
-        _log(job_id, f"Concat: {loops} loops | Est. size: {est_size:.2f} GB")
+        loops = max(0, math.ceil((audio_dur - intro_dur - outro_dur) / loop_dur))
+        est_size = (loop_size * (loops + 2) + audio_dur * 192 / 8 / 1024) / 1024
+        _log(job_id, f"Concat: intro + {loops} loops" + (" + outro" if outro_path else "") + f" | Est. size: {est_size:.2f} GB")
         _log(job_id, "Stream copying (no re-encode)...")
 
-        if intro_mode == "custom":
-            build_final_with_custom_intro(intro_path, base_loop, audio_path, output_path, temp_dir)
-        else:
-            build_final_video(intro_path, base_loop, audio_path, output_path, temp_dir)
+        build_final_video(
+            intro_path, base_loop, audio_path, output_path, temp_dir,
+            outro_path=outro_path,
+            audio_fade_in=a_fade_in,
+            audio_fade_out=a_fade_out,
+        )
 
         final_size = os.path.getsize(output_path) / (1024*1024*1024)
         _log(job_id, f"Done! Output: {final_size:.2f} GB")
