@@ -61,6 +61,14 @@ def encode_intro_with_fade_in(source_video, output_dir, fade_in_dur, bitrate_mbp
     return output
 
 
+def strip_audio(source_video, output_dir, bitrate_mbps=4):
+    """Re-encode custom intro to strip audio track for concat compatibility."""
+    output = os.path.join(output_dir, "intro_stripped.mp4")
+    cmd = ["ffmpeg", "-y", "-i", source_video] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    _run_ffmpeg(cmd)
+    return output
+
+
 def encode_outro_with_fade_out(base_loop_path, output_dir, fade_out_dur, bitrate_mbps=4, target_dur=None):
     output = os.path.join(output_dir, "outro_part.mp4")
     loop_dur = get_video_duration(base_loop_path)
@@ -114,6 +122,7 @@ def build_final_video(intro_path, base_loop_path, audio_path, output_path, temp_
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", concat_list,
         "-i", audio_path,
+        "-map", "0:v", "-map", "1:a",
         "-c:v", "copy",
     ]
 

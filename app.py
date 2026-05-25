@@ -10,7 +10,7 @@ from processing.audio import download_youtube_audio, concat_local_audio, get_aud
 from processing.video import (
     encode_base_loop, encode_intro_with_overlay,
     encode_intro_with_fade_in, encode_outro_with_fade_out,
-    build_final_video, get_video_duration
+    strip_audio, build_final_video, get_video_duration
 )
 from processing.overlay import default_layers
 
@@ -208,8 +208,8 @@ def _run_job(job_id, data):
                 _log(job_id, f"Re-encoding custom intro with fade in {v_fade_in}s...")
                 intro_path = encode_intro_with_fade_in(intro_src, temp_dir, v_fade_in, bitrate_mbps=bitrate)
             else:
-                intro_path = intro_src
-                _log(job_id, f"Using custom intro: {os.path.basename(intro_path)}")
+                _log(job_id, f"Stripping audio from custom intro for concat...")
+                intro_path = strip_audio(intro_src, temp_dir, bitrate_mbps=bitrate)
         else:
             layers = data.get("overlay_layers", default_layers())
             _log(job_id, f"Generating intro with {len(layers)} overlay layers...")
