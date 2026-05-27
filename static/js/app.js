@@ -29,8 +29,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (target) target.classList.add("active");
 
             if (tabName === "youtube" || tabName === "local") audioMode = tabName;
-            if (tabName === "auto-intro" || tabName === "custom-intro") {
-                introMode = tabName === "auto-intro" ? "auto" : "custom";
+            if (tabName === "auto-intro" || tabName === "custom-intro" || tabName === "none-intro") {
+                introMode = tabName === "auto-intro" ? "auto" : tabName === "custom-intro" ? "custom" : "none";
             }
         });
     });
@@ -244,6 +244,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (introMode === "custom" && !customIntroFile) {
             alert("Select a custom intro."); return null;
+        }
+        if (introMode === "none" && !videoFile) {
+            alert("Select a video source."); return null;
         }
 
         const name = document.getElementById("outputName").value || "output";

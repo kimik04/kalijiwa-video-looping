@@ -43,11 +43,16 @@ def encode_base_loop(source_video, output_dir, bitrate_mbps=4):
 
 def encode_intro_with_overlay(source_video, output_dir, layers, bitrate_mbps=4, fade_in_dur=0):
     output = os.path.join(output_dir, "intro_part.mp4")
-    vf = build_drawtext_filter(layers)
+    vf_parts = []
+    if layers:
+        vf_parts.append(build_drawtext_filter(layers))
     if fade_in_dur > 0:
-        vf = f"{vf},fade=t=in:st=0:d={fade_in_dur}"
+        vf_parts.append(f"fade=t=in:st=0:d={fade_in_dur}")
 
-    cmd = ["ffmpeg", "-y", "-i", source_video, "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    cmd = ["ffmpeg", "-y", "-i", source_video]
+    if vf_parts:
+        cmd.extend(["-vf", ",".join(vf_parts)])
+    cmd += _bitrate_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
@@ -112,7 +117,8 @@ def build_final_video(intro_path, base_loop_path, audio_path, output_path, temp_
 
     concat_list = os.path.join(temp_dir, "concat_list.txt")
     with open(concat_list, "w") as f:
-        f.write(f"file '{intro_path}'\n")
+        if intro_path:
+            f.write(f"file '{intro_path}'\n")
         for _ in range(loops_needed):
             f.write(f"file '{base_loop_path}'\n")
         if outro_path:

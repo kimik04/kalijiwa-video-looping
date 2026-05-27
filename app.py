@@ -202,7 +202,14 @@ def _run_job(job_id, data):
 
         # Step 3: Prepare intro (with optional fade in)
         jobs[job_id]["progress"] = "Preparing intro..."
-        if intro_mode == "custom":
+        intro_path = None
+        if intro_mode == "none":
+            if v_fade_in > 0:
+                _log(job_id, f"No intro, encoding first loop with fade in {v_fade_in}s...")
+                intro_path = encode_intro_with_fade_in(base_loop, temp_dir, v_fade_in, bitrate_mbps=bitrate)
+            else:
+                _log(job_id, "No intro")
+        elif intro_mode == "custom":
             intro_src = data["custom_intro"]
             if v_fade_in > 0:
                 _log(job_id, f"Re-encoding custom intro with fade in {v_fade_in}s...")
@@ -218,7 +225,7 @@ def _run_job(job_id, data):
             )
             _log(job_id, "Intro encoded")
 
-        intro_dur = get_video_duration(intro_path)
+        intro_dur = get_video_duration(intro_path) if intro_path else 0
 
         outro_path = None
         outro_dur = 0
