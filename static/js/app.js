@@ -259,6 +259,14 @@ document.addEventListener("DOMContentLoaded", () => {
             bitrate: parseFloat(document.getElementById("bitrate").value),
             outputName: name,
             overlayLayers: JSON.parse(JSON.stringify(overlayLayers)),
+            trim: {
+                start: parseFloat(document.getElementById("trimStart").value) || 0,
+                end: parseFloat(document.getElementById("trimEnd").value) || 0,
+            },
+            crossfade: {
+                enabled: document.getElementById("crossfadeEnabled").checked,
+                duration: parseFloat(document.getElementById("crossfadeDuration").value) || 0.2,
+            },
             fade: {
                 videoFadeIn: document.getElementById("videoFadeInEnabled").checked,
                 videoFadeInDur: parseFloat(document.getElementById("videoFadeInDuration").value),

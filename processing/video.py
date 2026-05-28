@@ -34,9 +34,45 @@ def _bitrate_args(bitrate_mbps):
     ]
 
 
-def encode_base_loop(source_video, output_dir, bitrate_mbps=4):
+def encode_base_loop(source_video, output_dir, bitrate_mbps=4,
+                     trim_start=0, trim_end=0, crossfade_dur=0):
     output = os.path.join(output_dir, "base_loop.mp4")
-    cmd = ["ffmpeg", "-y", "-i", source_video] + _bitrate_args(bitrate_mbps) + ["-an", output]
+
+    cmd = ["ffmpeg", "-y"]
+    if trim_start > 0:
+        cmd.extend(["-ss", str(trim_start)])
+    cmd.extend(["-i", source_video])
+    if trim_end > 0:
+        cmd.extend(["-to", str(trim_end - trim_start)])
+
+    cmd += _bitrate_args(bitrate_mbps) + ["-an", output]
+    _run_ffmpeg(cmd)
+
+    if crossfade_dur > 0:
+        output = _apply_crossfade(output, output_dir, crossfade_dur, bitrate_mbps)
+
+    return output
+
+
+def _apply_crossfade(clip_path, output_dir, crossfade_dur, bitrate_mbps):
+    output = os.path.join(output_dir, "base_loop_xfade.mp4")
+    clip_dur = get_video_duration(clip_path)
+
+    if crossfade_dur >= clip_dur * 0.5:
+        crossfade_dur = clip_dur * 0.25
+
+    offset = clip_dur - crossfade_dur
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", clip_path, "-i", clip_path,
+        "-filter_complex",
+        f"[0:v][1:v]xfade=transition=fade:duration={crossfade_dur}:offset={offset}[outv]",
+        "-map", "[outv]",
+        "-c:v", "libx264", "-preset", "fast",
+        "-b:v", f"{bitrate_mbps}M",
+        "-an", output
+    ]
     _run_ffmpeg(cmd)
     return output
 

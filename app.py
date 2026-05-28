@@ -154,6 +154,12 @@ def _run_job(job_id, data):
         intro_mode = data["intro_mode"]
         bitrate = data.get("bitrate", 4)
         fade = data.get("fade", {}) or {}
+        trim = data.get("trim", {}) or {}
+        crossfade = data.get("crossfade", {}) or {}
+
+        trim_start = float(trim.get("start", 0)) or 0
+        trim_end = float(trim.get("end", 0)) or 0
+        xfade_dur = float(crossfade.get("duration", 0.2)) if crossfade.get("enabled") else 0
 
         v_fade_in = float(fade.get("videoFadeInDur", 0)) if fade.get("videoFadeIn") else 0
         v_fade_out = float(fade.get("videoFadeOutDur", 0)) if fade.get("videoFadeOut") else 0
@@ -162,6 +168,10 @@ def _run_job(job_id, data):
 
         _log(job_id, f"Video: {os.path.basename(video_source)}")
         _log(job_id, f"Audio mode: {audio_mode} | Intro: {intro_mode} | Bitrate: {bitrate}M")
+        if trim_start or trim_end:
+            _log(job_id, f"Trim: {trim_start}s - {trim_end}s")
+        if xfade_dur:
+            _log(job_id, f"Crossfade: {xfade_dur}s")
         if v_fade_in or v_fade_out or a_fade_in or a_fade_out:
             _log(job_id, f"Fade — video in:{v_fade_in}s out:{v_fade_out}s | audio in:{a_fade_in}s out:{a_fade_out}s")
 
@@ -187,7 +197,10 @@ def _run_job(job_id, data):
         # Step 2: Encode base loop
         jobs[job_id]["progress"] = "Encoding base loop..."
         _log(job_id, f"Encoding base loop @ {bitrate} Mbps...")
-        base_loop = encode_base_loop(video_source, temp_dir, bitrate_mbps=bitrate)
+        base_loop = encode_base_loop(
+            video_source, temp_dir, bitrate_mbps=bitrate,
+            trim_start=trim_start, trim_end=trim_end, crossfade_dur=xfade_dur
+        )
         loop_size = os.path.getsize(base_loop) / (1024*1024)
         loop_dur = get_video_duration(base_loop)
         _log(job_id, f"Base loop: {loop_size:.1f} MB ({loop_dur:.1f}s)")
