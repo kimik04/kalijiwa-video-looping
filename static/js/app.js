@@ -328,6 +328,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             payload.fade = item.fade;
+            payload.trim = item.trim;
+            payload.crossfade = item.crossfade;
 
             logLine("[process] Sending to backend...", "dim");
             const res = await fetch("/api/process", {

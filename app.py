@@ -247,9 +247,11 @@ def _run_job(job_id, data):
             remaining = audio_dur - intro_dur
             loops = max(0, math.floor((remaining - v_fade_out) / loop_dur))
             outro_dur = remaining - loops * loop_dur
+            if outro_dur > loop_dur:
+                outro_dur = loop_dur
             if outro_dur < v_fade_out:
-                outro_dur = v_fade_out
-            _log(job_id, f"Encoding outro {outro_dur:.2f}s with fade out {v_fade_out}s...")
+                v_fade_out = outro_dur
+            _log(job_id, f"Encoding outro {outro_dur:.2f}s with fade out {v_fade_out:.2f}s...")
             outro_path = encode_outro_with_fade_out(
                 base_loop, temp_dir, v_fade_out, bitrate_mbps=bitrate, target_dur=outro_dur
             )

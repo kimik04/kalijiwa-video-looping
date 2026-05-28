@@ -115,10 +115,17 @@ def encode_outro_with_fade_out(base_loop_path, output_dir, fade_out_dur, bitrate
     loop_dur = get_video_duration(base_loop_path)
     if target_dur is None or target_dur <= 0 or target_dur > loop_dur:
         target_dur = loop_dur
+    if fade_out_dur > target_dur:
+        fade_out_dur = target_dur
     fade_start = max(0, target_dur - fade_out_dur)
     vf = f"fade=t=out:st={fade_start}:d={fade_out_dur}"
-    cmd = ["ffmpeg", "-y", "-i", base_loop_path, "-t", f"{target_dur}",
-           "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    cmd = [
+        "ffmpeg", "-y", "-i", base_loop_path,
+        "-t", f"{target_dur}", "-vf", vf,
+        "-c:v", "libx264", "-preset", "fast",
+        "-b:v", f"{bitrate_mbps}M",
+        "-an", output
+    ]
     _run_ffmpeg(cmd)
     return output
 
