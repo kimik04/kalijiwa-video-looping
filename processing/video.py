@@ -30,7 +30,6 @@ def _bitrate_args(bitrate_mbps):
         "-b:v", f"{bitrate_mbps}M",
         "-maxrate", f"{bitrate_mbps * 1.125:.1f}M",
         "-bufsize", f"{bitrate_mbps * 2}M",
-        "-profile:v", "high", "-r", "24",
     ]
 
 
