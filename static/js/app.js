@@ -396,6 +396,84 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Preview
+    document.getElementById("previewLoop").addEventListener("click", async () => {
+        if (!videoFile) { alert("Select a video source."); return; }
+        logLine("[preview] Generating loop preview...", "info");
+
+        const videoPath = await uploadFile(videoFile);
+        const payload = {
+            video_source: videoPath,
+            bitrate: parseFloat(document.getElementById("bitrate").value),
+            trim: {
+                start: parseFloat(document.getElementById("trimStart").value) || 0,
+                end: parseFloat(document.getElementById("trimEnd").value) || 0,
+            },
+            crossfade: {
+                enabled: document.getElementById("crossfadeEnabled").checked,
+                duration: parseFloat(document.getElementById("crossfadeDuration").value) || 0.2,
+            },
+        };
+
+        const res = await fetch("/api/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const { job_id } = await res.json();
+
+        const interval = setInterval(async () => {
+            const statusRes = await fetch(`/api/status/${job_id}`);
+            const status = await statusRes.json();
+            if (status.status === "done") {
+                clearInterval(interval);
+                const video = document.getElementById("previewVideo");
+                video.src = `/api/preview_file/${job_id}?t=${Date.now()}`;
+                video.load();
+                video.play();
+                document.getElementById("previewSection").classList.remove("hidden");
+                logLine("[preview] Ready", "success");
+            } else if (status.status === "error") {
+                clearInterval(interval);
+                logLine(`[preview] Error: ${status.error}`, "error");
+            }
+        }, 1000);
+    });
+
+    // Preview player controls
+    const pvVideo = document.getElementById("previewVideo");
+    document.getElementById("pvPlay").addEventListener("click", () => pvVideo.play());
+    document.getElementById("pvPause").addEventListener("click", () => pvVideo.pause());
+    document.getElementById("pvPrev").addEventListener("click", () => {
+        pvVideo.pause();
+        pvVideo.currentTime = Math.max(0, pvVideo.currentTime - 1/30);
+    });
+    document.getElementById("pvNext").addEventListener("click", () => {
+        pvVideo.pause();
+        pvVideo.currentTime = Math.min(pvVideo.duration, pvVideo.currentTime + 1/30);
+    });
+    document.getElementById("pvSpeed").addEventListener("change", (e) => {
+        pvVideo.playbackRate = parseFloat(e.target.value);
+    });
+    pvVideo.addEventListener("timeupdate", () => {
+        const cur = pvVideo.currentTime;
+        const dur = pvVideo.duration || 0;
+        document.getElementById("pvTime").textContent =
+            `${formatTime(cur)} / ${formatTime(dur)}`;
+        document.getElementById("pvSeek").value = dur ? (cur / dur * 100) : 0;
+    });
+    document.getElementById("pvSeek").addEventListener("input", (e) => {
+        const dur = pvVideo.duration || 0;
+        pvVideo.currentTime = (e.target.value / 100) * dur;
+    });
+
+    function formatTime(s) {
+        const m = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        const ms = Math.floor((s % 1) * 100);
+        return `${m}:${String(sec).padStart(2, "0")}.${String(ms).padStart(2, "0")}`;
+    }
+
     function escapeHtml(str) {
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }

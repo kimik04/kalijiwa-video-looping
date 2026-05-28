@@ -24,12 +24,11 @@ def _run_ffmpeg(cmd):
     return result
 
 
-def _bitrate_args(bitrate_mbps):
+def _enc_args(bitrate_mbps):
     return [
         "-c:v", "libx264", "-preset", "fast",
+        "-pix_fmt", "yuv420p",
         "-b:v", f"{bitrate_mbps}M",
-        "-maxrate", f"{bitrate_mbps * 1.125:.1f}M",
-        "-bufsize", f"{bitrate_mbps * 2}M",
     ]
 
 
@@ -37,14 +36,18 @@ def encode_base_loop(source_video, output_dir, bitrate_mbps=4,
                      trim_start=0, trim_end=0, crossfade_dur=0):
     output = os.path.join(output_dir, "base_loop.mp4")
 
-    cmd = ["ffmpeg", "-y"]
-    if trim_start > 0:
-        cmd.extend(["-ss", str(trim_start)])
-    cmd.extend(["-i", source_video])
-    if trim_end > 0:
-        cmd.extend(["-to", str(trim_end - trim_start)])
+    source_dur = get_video_duration(source_video)
+    start = trim_start if trim_start > 0 else 0
+    end = source_dur - trim_end if trim_end > 0 else source_dur
 
-    cmd += _bitrate_args(bitrate_mbps) + ["-an", output]
+    if start > 0 or end < source_dur:
+        trimmed = os.path.join(output_dir, "trimmed_src.mp4")
+        cmd = ["ffmpeg", "-y", "-ss", str(start), "-i", source_video,
+               "-t", str(end - start), "-c", "copy", "-an", trimmed]
+        _run_ffmpeg(cmd)
+        source_video = trimmed
+
+    cmd = ["ffmpeg", "-y", "-i", source_video] + _enc_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
 
     if crossfade_dur > 0:
@@ -68,10 +71,7 @@ def _apply_crossfade(clip_path, output_dir, crossfade_dur, bitrate_mbps):
         "-filter_complex",
         f"[0:v][1:v]xfade=transition=fade:duration={crossfade_dur}:offset={offset}[outv]",
         "-map", "[outv]",
-        "-c:v", "libx264", "-preset", "fast",
-        "-b:v", f"{bitrate_mbps}M",
-        "-an", output
-    ]
+    ] + _enc_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
@@ -87,24 +87,22 @@ def encode_intro_with_overlay(source_video, output_dir, layers, bitrate_mbps=4, 
     cmd = ["ffmpeg", "-y", "-i", source_video]
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
-    cmd += _bitrate_args(bitrate_mbps) + ["-an", output]
+    cmd += _enc_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
 
 def encode_intro_with_fade_in(source_video, output_dir, fade_in_dur, bitrate_mbps=4):
-    """Re-encode a custom intro video with fade in applied."""
     output = os.path.join(output_dir, "intro_faded.mp4")
     vf = f"fade=t=in:st=0:d={fade_in_dur}"
-    cmd = ["ffmpeg", "-y", "-i", source_video, "-vf", vf] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    cmd = ["ffmpeg", "-y", "-i", source_video, "-vf", vf] + _enc_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
 
 def strip_audio(source_video, output_dir, bitrate_mbps=4):
-    """Re-encode custom intro to strip audio track for concat compatibility."""
     output = os.path.join(output_dir, "intro_stripped.mp4")
-    cmd = ["ffmpeg", "-y", "-i", source_video] + _bitrate_args(bitrate_mbps) + ["-an", output]
+    cmd = ["ffmpeg", "-y", "-i", source_video] + _enc_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
@@ -121,10 +119,7 @@ def encode_outro_with_fade_out(base_loop_path, output_dir, fade_out_dur, bitrate
     cmd = [
         "ffmpeg", "-y", "-i", base_loop_path,
         "-t", f"{target_dur}", "-vf", vf,
-        "-c:v", "libx264", "-preset", "fast",
-        "-b:v", f"{bitrate_mbps}M",
-        "-an", output
-    ]
+    ] + _enc_args(bitrate_mbps) + ["-an", output]
     _run_ffmpeg(cmd)
     return output
 
@@ -149,7 +144,7 @@ def build_final_video(intro_path, base_loop_path, audio_path, output_path, temp_
     if loops_override is not None:
         loops_needed = loops_override
     else:
-        intro_dur = get_video_duration(intro_path)
+        intro_dur = get_video_duration(intro_path) if intro_path else 0
         loop_dur = get_video_duration(base_loop_path)
         if outro_path:
             outro_dur = get_video_duration(outro_path)

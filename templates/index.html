@@ -24,13 +24,13 @@
                     </div>
                     <div class="row mt-sm">
                         <label>Trim:</label>
-                        <input type="number" id="trimStart" value="0" min="0" step="0.1" class="input w-60" placeholder="Start">
-                        <span class="hint">-</span>
-                        <input type="number" id="trimEnd" value="0" min="0" step="0.1" class="input w-60" placeholder="End">
-                        <span class="hint">sec (0=full)</span>
+                        <input type="number" id="trimStart" value="0" min="0" step="0.1" class="input w-60" placeholder="0">
+                        <span class="hint">awal</span>
+                        <input type="number" id="trimEnd" value="0" min="0" step="0.1" class="input w-60" placeholder="0">
+                        <span class="hint">akhir (sec potong)</span>
                     </div>
                     <div class="row mt-sm">
-                        <input type="checkbox" id="crossfadeEnabled" checked>
+                        <input type="checkbox" id="crossfadeEnabled">
                         <label for="crossfadeEnabled" class="flex-1">Crossfade Loop</label>
                         <input type="number" id="crossfadeDuration" value="0.2" min="0.1" max="5" step="0.1" class="input w-60">
                         <span class="hint">sec</span>
@@ -128,6 +128,7 @@
 
                 <div class="section">
                     <div class="row">
+                        <button class="btn btn-preview" id="previewLoop">Preview</button>
                         <button class="btn btn-primary flex-1" id="startProcess">Start</button>
                         <button class="btn btn-batch" id="addToBatch">+ Batch</button>
                     </div>
@@ -141,8 +142,30 @@
                 </div>
             </div>
 
-            <!-- Middle: Overlay Editor -->
+            <!-- Middle: Overlay Editor + Preview -->
             <div class="overlay-panel">
+                <!-- Preview Player -->
+                <div id="previewSection" class="preview-section hidden">
+                    <h3>Loop Preview</h3>
+                    <div class="preview-player">
+                        <video id="previewVideo" loop muted></video>
+                        <div class="preview-controls">
+                            <button class="btn btn-sm" id="pvPlay">Play</button>
+                            <button class="btn btn-sm" id="pvPause">Pause</button>
+                            <button class="btn btn-sm" id="pvPrev">&lt;</button>
+                            <button class="btn btn-sm" id="pvNext">&gt;</button>
+                            <select id="pvSpeed" class="input-mini">
+                                <option value="0.25">0.25x</option>
+                                <option value="0.5">0.5x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="2">2x</option>
+                            </select>
+                            <span id="pvTime" class="hint">0:00 / 0:00</span>
+                        </div>
+                        <input type="range" id="pvSeek" class="preview-seek" min="0" max="100" value="0" step="0.1">
+                    </div>
+                </div>
+
                 <h3>Text Overlay</h3>
                 <div id="overlayLayers" class="overlay-scroll"></div>
                 <button class="btn btn-sm" id="addLayer">+ Layer</button>

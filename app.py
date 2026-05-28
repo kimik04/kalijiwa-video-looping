@@ -110,6 +110,32 @@ def batch_process():
     return jsonify({"batch_id": batch_id, "job_ids": job_ids})
 
 
+@app.route("/api/preview", methods=["POST"])
+def preview_loop():
+    data = request.get_json()
+    preview_id = str(uuid.uuid4())[:8]
+    jobs[preview_id] = {
+        "status": "processing",
+        "progress": "Generating preview...",
+        "error": None,
+        "output": None,
+        "logs": [],
+    }
+    t = threading.Thread(target=_run_preview, args=(preview_id, data))
+    t.start()
+    return jsonify({"job_id": preview_id})
+
+
+@app.route("/api/preview_file/<preview_id>")
+def serve_preview(preview_id):
+    job = jobs.get(preview_id)
+    if not job or not job.get("output"):
+        return jsonify({"error": "Not ready"}), 404
+    directory = os.path.dirname(job["output"])
+    filename = os.path.basename(job["output"])
+    return send_from_directory(directory, filename)
+
+
 @app.route("/api/status/<job_id>")
 def job_status(job_id):
     job = jobs.get(job_id)
@@ -142,6 +168,42 @@ def _run_batch(job_ids, items):
         jobs[job_id]["status"] = "processing"
         _log(job_id, f"Starting batch item {i+1}/{len(items)}")
         _run_job(job_id, data)
+
+
+def _run_preview(preview_id, data):
+    try:
+        temp_dir = os.path.join(app.config["TEMP_FOLDER"], preview_id)
+        os.makedirs(temp_dir, exist_ok=True)
+
+        video_source = data["video_source"]
+        bitrate = data.get("bitrate", 4)
+        trim = data.get("trim", {}) or {}
+        crossfade = data.get("crossfade", {}) or {}
+
+        trim_start = float(trim.get("start", 0)) or 0
+        trim_end = float(trim.get("end", 0)) or 0
+        xfade_dur = float(crossfade.get("duration", 0.2)) if crossfade.get("enabled") else 0
+
+        _log(preview_id, "Generating loop preview...")
+        base_loop = encode_base_loop(
+            video_source, temp_dir, bitrate_mbps=bitrate,
+            trim_start=trim_start, trim_end=trim_end, crossfade_dur=xfade_dur
+        )
+
+        output_path = os.path.join(app.config["OUTPUT_FOLDER"], f"preview_{preview_id}.mp4")
+        import shutil
+        shutil.copy2(base_loop, output_path)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        jobs[preview_id]["status"] = "done"
+        jobs[preview_id]["progress"] = "Preview ready"
+        jobs[preview_id]["output"] = output_path
+        _log(preview_id, "Preview ready")
+
+    except Exception as e:
+        jobs[preview_id]["status"] = "error"
+        jobs[preview_id]["error"] = str(e)
+        _log(preview_id, f"ERROR: {str(e)}")
 
 
 def _run_job(job_id, data):

@@ -414,3 +414,66 @@ header h1 {
     font-size: 0.65rem;
     color: #888;
 }
+
+/* Preview Player */
+.preview-section {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #1e1e3a;
+}
+
+.preview-player {
+    background: #0a0a14;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.preview-player video {
+    width: 100%;
+    display: block;
+    background: #000;
+}
+
+.preview-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.5rem;
+    background: #13132a;
+}
+
+.preview-seek {
+    width: 100%;
+    height: 4px;
+    appearance: none;
+    background: #1e1e3a;
+    outline: none;
+    cursor: pointer;
+}
+
+.preview-seek::-webkit-slider-thumb {
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2a6ae8;
+    cursor: pointer;
+}
+
+.input-mini {
+    padding: 0.15rem 0.3rem;
+    background: #0a0a14;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    color: #fff;
+    font-size: 0.65rem;
+}
+
+.btn-preview {
+    background: #2a4a2a;
+    color: #8f8;
+}
+
+.btn-preview:hover {
+    background: #3a5a3a;
+}
